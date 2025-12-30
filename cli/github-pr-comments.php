@@ -38,12 +38,28 @@ class GithubCommentsCli extends AbstractCommand
 
     protected function doExecute(InputInterface $input, OutputInterface $output): int
     {
-        $token       = null !== $input->getOption('token') ? $input->getOption('token') : $_ENV['GITHUB_TOKEN'] ?? null;
-        $owner       = null !== $input->getOption('owner') ? $input->getOption('owner') : $_ENV['GITHUB_OWNER'] ?? null;
-        $repo        = null !== $input->getOption('repo') ? $input->getOption('repo') : $_ENV['GITHUB_REPO'] ?? null;
-        $base        = null !== $input->getOption('base') ? $input->getOption('base') : $_ENV['GITHUB_BASE'] ?? '6.0-dev';
-        $milestone   = null !== $input->getOption('milestone') ? $input->getOption('milestone') : $_ENV['GITHUB_MILESTONE'] ?? 'Joomla! 6.0.0';
-        $mergedSince = null !== $input->getOption('merged-since') ? $input->getOption('merged-since') : null;
+        $token       = $input->getOption('token') ?? $_ENV['GITHUB_TOKEN'] ?? null;
+        $owner       = $input->getOption('owner') ?? $_ENV['GITHUB_OWNER'] ?? null;
+        $repo        = $input->getOption('repo') ?? $_ENV['GITHUB_REPO'] ?? null;
+        $base        = $input->getOption('base') ?? $_ENV['GITHUB_BASE'] ?? '6.0-dev';
+        $milestone   = $input->getOption('milestone') ?? $_ENV['GITHUB_MILESTONE'] ?? 'Joomla! 6.0.0';
+        $mergedSince = $input->getOption('merged-since') ?? null;
+
+        // Validate required parameters
+        if (!$token) {
+            $output->writeln('<error>GitHub token is required. Set GITHUB_TOKEN in .env or use --token option.</error>');
+            return 1;
+        }
+
+        if (!$owner) {
+            $output->writeln('<error>GitHub owner is required. Set GITHUB_OWNER in .env or use --owner option.</error>');
+            return 1;
+        }
+
+        if (!$repo) {
+            $output->writeln('<error>GitHub repository is required. Set GITHUB_REPO in .env or use --repo option.</error>');
+            return 1;
+        }
 
         // Validate date filter if present
         if ($mergedSince && (!($date = \DateTime::createFromFormat('Y-m-d', $mergedSince)) || $date->format('Y-m-d') !== $mergedSince)) {
@@ -102,7 +118,7 @@ GQL;
             $data        = json_decode($response->getBody());
 
             if ($response->getStatusCode() !== 200) {
-                $output->writeln('<error>Error fetching data: ' . $response->getReasonPhrase() . '<br>token: ' . $token . '</error>');
+                $output->writeln('<error>Error fetching data: ' . $response->getReasonPhrase() . '</error>');
                 return 1;
             }
 
@@ -167,29 +183,53 @@ GQL;
             $after    = $pageInfo->endCursor;
         } while ($hasNext);
 
+        // Check if any test comments were found
+        if (empty($collected)) {
+            $output->writeln('<comment>No test comments found matching the criteria. No files written.</comment>');
+            return 0;
+        }
+
         // Sort authors
         uksort($collected, 'strcasecmp');
 
         // Write markdown output
-        $md = "## :technologist: Test contributions\n\n";
-        $md .= "Thank you to all the testers who help us maintain high quality standards and deliver a robust product.\n\n";
-        $mdFull          = $md;
-        $contributorList = [];
+        $header              = "## :technologist: Test contributions\n\n";
+        $header .= "Thank you to all the testers who help us maintain high quality standards and deliver a robust product.\n\n";
+        $contributorList     = [];
+        $contributorListFull = [];
+
         // Output collected comments
         foreach ($collected as $author => $comments) {
-            $countTests        = \count($comments);
-            $contributorList[] = "@{$author} ({$countTests})";
-            $mdFull .= "- @{$author} ({$countTests})\n";
+            $countTests            = \count($comments);
+            $contributorList[]     = "@{$author} ({$countTests})";
+            $contributorListFull[] = "- @{$author} ({$countTests})\n";
+
             $output->writeln(\sprintf("Tests by %s:", $author));
             foreach ($comments as $comment) {
-                $mdFull .= "    - PR #{$comment['pr']}: {$comment['title']}\n";
+                $contributorListFull[] = "    - PR #{$comment['pr']}: {$comment['title']}\n";
                 $output->writeln(\sprintf(" - PR #%d: %s", $comment['pr'], $comment['title']));
             }
         }
-        $md .= implode(', ', $contributorList) . "\n";
 
-        file_put_contents(__DIR__ . '/../collaborator-tester.md', $md);
-        file_put_contents(__DIR__ . '/../collaborator-tester-full.md', $mdFull);
+        // Build summary and full markdown
+        $md     = $header . implode(', ', $contributorList) . "\n";
+        $mdFull = $header . implode('', $contributorListFull);
+
+        // Write files with error handling
+        $summaryFile = __DIR__ . '/../collaborator-tester.md';
+        $fullFile    = __DIR__ . '/../collaborator-tester-full.md';
+
+        if (file_put_contents($summaryFile, $md) === false) {
+            $output->writeln('<error>Failed to write summary file: ' . $summaryFile . '</error>');
+            return 1;
+        }
+
+        if (file_put_contents($fullFile, $mdFull) === false) {
+            $output->writeln('<error>Failed to write full file: ' . $fullFile . '</error>');
+            return 1;
+        }
+
+        $output->writeln(\sprintf('<info>Successfully written to %s and %s</info>', $summaryFile, $fullFile));
 
         return 0;
     }
