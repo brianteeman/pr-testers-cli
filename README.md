@@ -44,20 +44,30 @@ The `github-pr-comments` CLI command fetches merged pull request comments from a
   > Store your GitHub token in a CI secret or environment variable rather than in `.env` to keep it secure. Ensure your token has read-only permissions (e.g., `public_repo`).
 
 4. **Run** the command:
+
+   **Important:** You must include the command name `github-pr-comments` when using CLI options.
+
    ```bash
-   php cli/github-pr-comments.php \
+   # Using environment variables from .env file
+   php cli/github-pr-comments.php github-pr-comments
+
+   # With date filter
+   php cli/github-pr-comments.php github-pr-comments --merged-since=2025-11-05
+
+   # With all CLI options
+   php cli/github-pr-comments.php github-pr-comments \
      --token=your_token_here \
      --owner=your_org \
      --repo=your_repo \
      --base=main \
-     --milestone=v1.0.0 \
-     --merged-since=2023-01-01 \
+     --milestone="v1.0.0" \
+     --merged-since=2025-01-01 \
      --keyword="I have tested this item" \
      --keyword="OK to merge"
    ```
 
   > [!TIP]
-  > The `merged-since` date filter is optional and especially useful if you have a milestone with multiple releases (alpha, beta, etc.) and want to reflect the tests accurately.
+  > The `merged-since` date filter is optional and especially useful if you have a milestone with multiple releases (alpha, beta, etc.) and want to reflect the tests accurately. The date format must be `YYYY-MM-DD`.
 
 ## How it works
 
@@ -71,7 +81,14 @@ The `github-pr-comments` CLI command fetches merged pull request comments from a
 ## Example
 
 ```bash
-php cli/github-pr-comments.php --merged-since=2023-01-01 --milestone=v1.0.0 --keyword="tested" --keyword="LGTM"
+# Filter PRs merged since a specific date
+php cli/github-pr-comments.php github-pr-comments --merged-since=2025-11-05
+
+# Override milestone and keywords from CLI
+php cli/github-pr-comments.php github-pr-comments \
+  --milestone="v1.0.0" \
+  --keyword="tested" \
+  --keyword="LGTM"
 ```
 
 Get a list of all possible options:
@@ -86,10 +103,24 @@ php cli/github-pr-comments.php github-pr-comments --help
     - PR #124: Improve validation
   - Tests by bob:
     - PR #122: Add logging
+  - Success message with file paths
 
-- `collaborator-tester.md` is created with the grouped results.
+> [!NOTE]
+> If no test comments are found matching the criteria, no files are written and a message is displayed: "No test comments found matching the criteria. No files written."
 
-  > ## :technologist: Test contributions
-  > Thank you to all the testers who help us maintain high quality standards and deliver a robust product.
-  > 
-  > @alice (2), @bob (1)
+- Two markdown files are created (only if test comments are found):
+  - **`collaborator-tester.md`** - Summary with author mentions and counts:
+    > ## :technologist: Test contributions
+    > Thank you to all the testers who help us maintain high quality standards and deliver a robust product.
+    >
+    > @alice (2), @bob (1)
+
+  - **`collaborator-tester-full.md`** - Detailed list with counts and PR titles:
+    > ## :technologist: Test contributions
+    > Thank you to all the testers who help us maintain high quality standards and deliver a robust product.
+    >
+    > - @alice (2)
+    >     - PR #123: Fix typo
+    >     - PR #124: Improve validation
+    > - @bob (1)
+    >     - PR #122: Add logging
